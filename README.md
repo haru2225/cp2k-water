@@ -26,10 +26,23 @@ qsub run_cp2k.pbs
 - 古典MDの配置は出発点にすぎず、DFTで緩和し直す。リボンは(v1のSZV緩和なので)最初は結合が長いが、DZVP最適化で縮む。Mgサイトも緩和される。
 - 最適化は最大150ステップ(力の基準 3e-3 Ha/bohr)。walltime切れ・SCF不収束で止まっても、同じ `qsub run_cp2k.pbs` で最後の構造から再開する(SCFが収束しない場合は、対角化 + Broyden + smearing の頑健な設定で自動リトライ)。完了済みはスキップ。
 - 計算時間の見込み(未実測): ローカルの8コアで、123原子の1点計算が約20分(OTが299反復)、最適化の1ステップは数分。1系あたり数時間〜10時間程度か。
-- `#PBS` の既定: `-q sc16`、`select=1:ncpus=16:mpiprocs=16`、`walltime=24:00:00`、`-J 1-12`(仮置き)。変更はコマンドラインで: `qsub -l walltime=48:00:00 run_cp2k.pbs`。`-J` が使えない場合は、`run_cp2k.pbs` の `#PBS -J 1-12` の行を削除して、系ごとに `qsub -v NAME=<系> run_cp2k.pbs`。
+- `#PBS` の既定: `-q sc16`、`select=2:ncpus=16:mpiprocs=16`（2ノード）、`walltime=24:00:00`、`-J 1-12`(仮置き)。変更はコマンドラインで: `qsub -l walltime=48:00:00 run_cp2k.pbs`。`-J` が使えない場合は、`run_cp2k.pbs` の `#PBS -J 1-12` の行を削除して、系ごとに `qsub -v NAME=<系> run_cp2k.pbs`。
 - 環境は自動(センターのサンプル `cp2k_20251.sh` の `module load` 等を再生、CP2K本体と `BASIS_MOLOPT` を探す)。計算ノードにpythonは不要。
 - 乾いたリボンとの比較(`analyze_wet.py` の dq)をしたいときだけ、`cp2k_v2` の結果が要る: `bash fetch_ribbons.sh ../cp2k_v2`。無くても、湿った系の電荷自体は出る。
 - 注意: ここではリボンを水と一緒に緩和するので、乾いたリボンとの dq は「分極・電荷移動」に「水によるリボンの構造変化」が加わった値になる。
+
+
+## 並列度(1構造あたりのノード数)
+構造(系)ごとのサブジョブに加えて、**1つのサブジョブがCP2Kを複数ノードで走らせる**。MPIランク数は `$PBS_NODEFILE` の行数(全ノード分)から自動で決まり、
+複数ノードのときはMPIの種類(Open MPI / Intel MPI・MPICH)を見て `--hostfile` か `-f` を付ける(`qsub -v MPI_OPTS="..."` で上書き、`MPI_OPTS=none` で無し)。
+```bash
+qsub run_cp2k.pbs            # 既定: 2ノード x 16 = 32ランク / サブジョブ
+bash go.sh 4                 # 4ノード x 16 = 64ランク / サブジョブ(速いが、要求が大きいぶん待ち時間が伸びる)
+bash go.sh 4 48:00:00        # walltimeも指定。以降の引数は qsub にそのまま渡す
+```
+`sc16` を16コア/ノードと仮定している。違うなら `qsub -l select=<N>:ncpus=<コア数>:mpiprocs=<コア数> run_cp2k.pbs`。
+90〜150原子のCP2Kは64ランク前後までは伸びる(それ以上は効率が落ちる)はず(未実測)。全体の資源は「サブジョブ数 x ノード数」: v2は7本、waterは12本。
+待ちが長いときは、`go.sh 2` や `-J 1-3`(一部ずつ)で小さくする。
 
 ## 解析
 ```bash
