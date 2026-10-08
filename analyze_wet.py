@@ -4,7 +4,8 @@
     python3 analyze_wet.py        # needs ribbons_relaxed/<rib>/sp.out (dry, from cp2k_v2) and runs_wet/<case>/sp.out ; numpy only
 
 For every wet case the first n_ribbon atoms are the same ribbon atoms as in the dry (relaxed) calculation, so
-dq_i = q_wet,i - q_dry,i is a per-atom polarisation / charge-transfer response to water (+ Na+).
+dq_i = q_wet,i - q_dry,i is a per-atom response to water (+ Na+): polarisation / charge transfer PLUS the geometry change that the
+wet DFT relaxation causes (the ribbon is relaxed together with the water here, unlike the dry reference).
 For the 'Na' variant one Al is replaced by Mg and the layer carries -1 e, so its dq also contains the effect of
 the substitution (not separable here); the water-only cases are the clean polarisation test.
 """
@@ -36,11 +37,16 @@ def main():
             continue
         meta = json.loads((HERE / "structures_wet" / f"{d.name}.json").read_text())
         rib, nr = meta["ribbon"], meta["n_ribbon"]
-        dry_out = HERE / "ribbons_relaxed" / rib / "sp.out"
-        if not dry_out.exists():
-            print(d.name, ": dry reference missing"); continue
+        dry_out = HERE / "ribbons_relaxed" / rib / "sp.out"      # optional: bash fetch_ribbons.sh ../cp2k_v2
         el_w, q_w = hirshfeld(d / "sp.out")
+        if not dry_out.exists():
+            k = nr + (1 if meta["na"] else 0)
+            print(f"{d.name}: (no dry reference) ribbon total {q_w[:nr].sum():+.3f} e | water O {q_w[k::3].mean():+.3f} "
+                  f"H {np.concatenate([q_w[k+1::3], q_w[k+2::3]]).mean():+.3f}" + (f" | Na {q_w[nr]:+.3f}" if meta["na"] else ""))
+            continue
         el_d, q_d = hirshfeld(dry_out)
+        if len(q_d) != nr:
+            print(d.name, ": dry reference has a different atom count"); continue
         dq = q_w[:nr] - q_d
         sel = np.ones(nr, bool)
         if meta["na"]:

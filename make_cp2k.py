@@ -115,7 +115,7 @@ def inp(name, cell, mode, robust=False, elements=tuple(KIND)):
 """
 
 
-def write_set(src_dir, out_dir, opt):
+def write_set(src_dir, out_dir, opt, loose=False):
     for xyz in sorted(src_dir.glob("*.xyz")):
         name = xyz.stem
         cell = json.loads(xyz.with_suffix(".json").read_text())["cell"]
@@ -125,8 +125,11 @@ def write_set(src_dir, out_dir, opt):
         warm = HERE / "warmstart" / f"{name}.xyz"
         shutil.copy(warm if (opt and warm.exists()) else xyz, d / "start.xyz")   # warm start from an earlier relaxed geometry
         if opt:
-            (d / "opt.inp").write_text(inp(name, cell, "opt", elements=elements))
-            (d / "opt_robust.inp").write_text(inp(name, cell, "opt", robust=True, elements=elements))
+            o, r = inp(name, cell, "opt", elements=elements), inp(name, cell, "opt", robust=True, elements=elements)
+            if loose:   # large wet systems: more steps, looser force criterion (3e-3 Ha/bohr)
+                o, r = [t.replace("MAX_ITER 100", "MAX_ITER 150").replace("MAX_FORCE 1.0E-3", "MAX_FORCE 3.0E-3") for t in (o, r)]
+            (d / "opt.inp").write_text(o)
+            (d / "opt_robust.inp").write_text(r)
         else:
             (d / "NO_OPT").write_text("single point on the given geometry\n")
         (d / "sp.inp").write_text(inp(name, cell, "sp", elements=elements))
@@ -137,7 +140,7 @@ def write_set(src_dir, out_dir, opt):
 
 
 def main():
-    write_set(HERE / "structures_wet", "runs_wet", False)
+    write_set(HERE / "structures_wet", "runs_wet", True, loose=True)
 
 
 if __name__ == "__main__":

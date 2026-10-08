@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Ribbon + water (+Mg/Na) single points, all 12 in PARALLEL with ONE command, run from the repo root:   qsub run_cp2k.pbs
+# Ribbon + water (+Mg/Na): DFT relaxation of the whole system (DZVP, 400 Ry, all atoms free) -> Hirshfeld charges.
+# All 12 systems in PARALLEL with ONE command, run from the repo root:   qsub run_cp2k.pbs   (independent of cp2k_v2)
 # -> a PBS job array: one sub-job per system (indices 1-12 = runs_wet/* in alphabetical order), all start at once.
-# Needs ribbons_relaxed/<ribbon>/relaxed.xyz (DZVP-relaxed dry ribbons from cp2k_v2): bash fetch_ribbons.sh
 # Re-submit the same command to resume; finished structures (charges.dat) are skipped.
 # Serial alternative (everything in one job / a single structure): run_cp2k_serial.pbs
 # Re-run the same command to resume; finished structures/stages are skipped.
@@ -101,25 +101,8 @@ for n in "${names[@]}"; do
   [[ -f charges.dat ]] && { echo "[$n] already done"; continue; }
   natoms=$(head -n 1 start.xyz | tr -d ' ')
 
-  # ---- geometry: the given geometry (NO_OPT) ----
-  if [[ -f NO_OPT ]]; then
-    # put the DZVP-relaxed ribbon coordinates into the first n atoms (element labels, e.g. Mg, are kept)
-    if [[ ! -f start_merged.xyz ]]; then
-      read -r rib nrib < ribbon.txt
-      src="$here/ribbons_relaxed/$rib/relaxed.xyz"
-      if [[ -f "$src" ]]; then
-        awk -v n="$nrib" 'NR==FNR { if (FNR > 2 && FNR <= n + 2) { x[FNR] = $2; y[FNR] = $3; z[FNR] = $4 } next }
-                          FNR > 2 && FNR <= n + 2 { printf "%s %s %s %s\n", $1, x[FNR], y[FNR], z[FNR]; next } { print }' "$src" start.xyz > start_merged.xyz
-        echo "[$n] ribbon coordinates taken from $src"
-      elif [[ -n "${ALLOW_UNRELAXED:-}" ]]; then
-        echo "[$n] WARNING: $src missing; using the ribbon as built (SZV-level geometry)" >&2; cp start.xyz start_merged.xyz
-      else
-        echo "[$n] $src missing. Run the dry relaxations (cp2k_v2) and: bash fetch_ribbons.sh   (or qsub -v ALLOW_UNRELAXED=1 ... to use the built geometry)" >&2; continue
-      fi
-    fi
-    [[ -f relaxed.xyz ]] || cp start_merged.xyz relaxed.xyz
-  fi
-  # (optimisation branch below is unused for runs_wet)
+  # ---- geometry: DFT optimisation (3 attempts) unless the folder has a NO_OPT marker ----
+  # (runs_wet: every system is first relaxed with DFT, all atoms free, then the charges are computed)
   if [[ -f NO_OPT ]]; then
     [[ -f relaxed.xyz ]] || cp start.xyz relaxed.xyz
   elif [[ ! -f relaxed.xyz ]]; then
