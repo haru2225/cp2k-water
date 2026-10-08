@@ -50,7 +50,7 @@ def inp(name, cell, mode, robust=False, elements=tuple(KIND)):
         scf_block = f"""    &SCF
       SCF_GUESS ATOMIC
       EPS_SCF {eps}
-      MAX_SCF 400
+      MAX_SCF 600
       ADDED_MOS 40
       &DIAGONALIZATION
         ALGORITHM STANDARD
@@ -70,7 +70,7 @@ def inp(name, cell, mode, robust=False, elements=tuple(KIND)):
         scf_block = f"""    &SCF
       SCF_GUESS ATOMIC
       EPS_SCF {eps}
-      MAX_SCF 300
+      MAX_SCF 600
       &OT
         PRECONDITIONER FULL_SINGLE_INVERSE
         MINIMIZER DIIS
